@@ -1,28 +1,12 @@
 
-# ==========================================
-# Stage 1: Build frontend assets using Node
-# ==========================================
-FROM node:22-bookworm-slim AS frontend
+# Use Node.js from the official Node image
+FROM node:22-bookworm-slim AS node
 
-WORKDIR /app
-
-# Copy package files first for Docker caching
-COPY package.json package-lock.json ./
-
-# Install exact dependencies
-RUN npm ci
-
-# Copy application source
-COPY . .
-
-# Generate production Vite assets
-RUN npm run build
-
-
-# ==========================================
-# Stage 2: Laravel backend using PHP + Apache
-# ==========================================
+# PHP + Apache production image
 FROM php:8.4-apache
+
+# Copy Node.js and npm into PHP image
+COPY --from=node /usr/local/ /usr/local/
 
 # Install system dependencies and PHP extensions
 RUN apt-get update && apt-get install -y \
@@ -52,21 +36,18 @@ WORKDIR /var/www/html
 # Copy Laravel application
 COPY . .
 
-# Copy compiled frontend assets from Node stage
-COPY --from=frontend /app/public/build ./public/build
-
-# Configure Apache to serve Laravel's public directory
-RUN sed -ri 's!/var/www/html!/var/www/html/public!g' \
-    /etc/apache2/sites-available/000-default.conf \
-    && sed -ri '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' \
-    /etc/apache2/apache2.conf
-
-# Install production PHP dependencies
+# Install PHP production dependencies first
 RUN composer install \
     --no-dev \
     --prefer-dist \
     --no-interaction \
     --optimize-autoloader
+
+# Install frontend dependencies
+RUN npm ci
+
+# Build frontend assets (Wayfinder can now execute PHP Artisan)
+RUN npm run build
 
 # Set Laravel directory permissions
 RUN chown -R www-data:www-data storage bootstrap/cache \
