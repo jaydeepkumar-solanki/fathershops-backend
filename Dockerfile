@@ -1,6 +1,30 @@
+
+# ==========================================
+# Stage 1: Build frontend assets using Node
+# ==========================================
+FROM node:22-bookworm-slim AS frontend
+
+WORKDIR /app
+
+# Copy package files first for Docker caching
+COPY package.json package-lock.json ./
+
+# Install exact dependencies
+RUN npm ci
+
+# Copy application source
+COPY . .
+
+# Generate production Vite assets
+RUN npm run build
+
+
+# ==========================================
+# Stage 2: Laravel backend using PHP + Apache
+# ==========================================
 FROM php:8.4-apache
 
-# Install system dependencies
+# Install system dependencies and PHP extensions
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
@@ -28,13 +52,16 @@ WORKDIR /var/www/html
 # Copy Laravel application
 COPY . .
 
+# Copy compiled frontend assets from Node stage
+COPY --from=frontend /app/public/build ./public/build
+
 # Configure Apache to serve Laravel's public directory
 RUN sed -ri 's!/var/www/html!/var/www/html/public!g' \
     /etc/apache2/sites-available/000-default.conf \
     && sed -ri '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' \
     /etc/apache2/apache2.conf
 
-# Install production dependencies
+# Install production PHP dependencies
 RUN composer install \
     --no-dev \
     --prefer-dist \
