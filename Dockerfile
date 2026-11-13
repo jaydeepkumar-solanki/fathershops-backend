@@ -28,6 +28,14 @@ RUN apt-get update && apt-get install -y \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 
+# Configure Apache to serve Laravel's public directory
+RUN sed -ri 's!/var/www/html!/var/www/html/public!g' \
+    /etc/apache2/sites-available/000-default.conf \
+    && printf '\n<Directory /var/www/html/public>\n\
+    AllowOverride All\n\
+    Require all granted\n\
+</Directory>\n' >> /etc/apache2/apache2.conf
+
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -46,7 +54,7 @@ RUN composer install \
 # Install frontend dependencies
 RUN npm ci
 
-# Build frontend assets (Wayfinder can now execute PHP Artisan)
+# Build frontend assets (Wayfinder needs PHP Artisan)
 RUN npm run build
 
 # Set Laravel directory permissions
